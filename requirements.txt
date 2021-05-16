@@ -1,0 +1,6 @@
+whoosh
+# Elasticsearch
+elasticsearch
+# Testing
+pytest
+pytest-asyncio

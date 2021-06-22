@@ -349,3 +349,10 @@ def test_spanbefore(to_es: ToES, qparser: qp.QueryParser):
 def test_spancondition(to_es: ToES, qparser: qp.QueryParser):
     with pytest.raises(NotImplementedError):
         to_es(q.SpanCondition(*map(qparser.parse, ['text:abc', 'key:a'])))
+
+
+def test_query_boost(to_es: ToES):
+    assert to_es("key:a^5.0 int:1^2.0") == {'bool': {'must': [
+        {'term': {'key': {'value': 'a', 'boost': 5.0}}},
+        {'term': {'int': {'value': 1, 'boost': 2.0}}},
+    ]}}

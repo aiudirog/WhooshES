@@ -235,10 +235,8 @@ class ESQueryTransformer(QueryTransformer[EsQ]):
             body = kwargs
         elif kwargs:
             body.update(kwargs)
-        boost = 1.0
-        try:
-            boost = self._query.boost
-        except AttributeError:
+        boost = getattr(_query, 'boost', 1.0)
+        if boost == 1.0:
             try:
                 boost = self.schema[_query.fieldname].format.field_boost
             except (AttributeError, KeyError):

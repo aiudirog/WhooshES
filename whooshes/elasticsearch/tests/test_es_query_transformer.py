@@ -100,6 +100,22 @@ def test_or(to_es: ToES):
     ]}}
 
 
+def test_or_optimize(to_es: ToES):
+    assert to_es("key:a OR key:b") == {'terms': {'key': ['a', 'b']}}
+    assert to_es("key:a OR key:b^2 OR key:c") == {'bool': {'should': [
+        {'term': {'key': {'value': 'b', 'boost': 2.0}}},
+        {'terms': {'key': ['a', 'c']}},
+    ]}}
+    assert to_es("key:a OR int:1 OR key:b") == {'bool': {'should': [
+        {'term': {'int': {'value': 1}}},
+        {'terms': {'key': ['a', 'b']}},
+    ]}}
+    assert to_es("(key:a OR key:b)^2") == {
+        'terms': {'key': ['a', 'b']},
+        'boost': 2.0,
+    }
+
+
 def test_disjunctionmax(to_es: ToES, qparser: qp.QueryParser):
     subqs = list(map(qparser.parse, ['text:abc', 'int:1']))
     assert to_es(q.DisjunctionMax(subqs)) == {'dis_max': {
@@ -356,3 +372,26 @@ def test_query_boost(to_es: ToES):
         {'term': {'key': {'value': 'a', 'boost': 5.0}}},
         {'term': {'int': {'value': 1, 'boost': 2.0}}},
     ]}}
+
+
+def test_nested_or(to_es: ToES):
+    assert to_es(q.Or([
+        q.Term('key', 'a'),
+        q.Or([q.Term('int', 1), q.Term('key', 'b')])
+    ])) == {'bool': {'should': [
+        {'term': {'key': {'value': 'a'}}},
+        {'bool': {
+            'should': [
+                {'term': {'int': {'value': 1}}},
+                {'term': {'key': {'value': 'b'}}},
+            ]
+        }},
+    ]}}
+    assert to_es(q.Or([
+        q.Term('key', 'a'),
+        q.Or([q.Term('int', 1), q.Term('int', 2)])
+    ])) == {'bool': {'should': [
+        {'term': {'key': {'value': 'a'}}},
+        {'terms': {'int': [1, 2]}},
+    ]}}
+

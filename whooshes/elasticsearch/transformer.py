@@ -1,6 +1,7 @@
 __all__ = ['ESQueryTransformer']
 
-from typing import Dict, Any, Union
+from itertools import groupby
+from typing import Dict, Any, Union, Tuple
 
 from whoosh import query as q, fields as f
 from whoosh.query import Query
@@ -56,7 +57,33 @@ class ESQueryTransformer(QueryTransformer[EsQ]):
         return self._bool('must', op)
 
     def handle_or(self, op: q.Or) -> EsQ:
-        return self._bool('should', op)
+        query = self._bool('should', op)
+
+        # Merge multiple term queries for the same field using terms
+        subqs = query['bool']['should']
+
+        def key_boost(s: EsQ) -> Tuple[str, float]:
+            term = s['term']
+            k = next(iter(term))
+            return k, term[k].get('boost', 0.0)
+
+        term_qs = sorted((s for s in subqs if 'term' in s), key=key_boost)
+        for (key, boost), key_terms in groupby(term_qs, key=key_boost):
+            key_terms = list(key_terms)
+            if len(key_terms) > 1:
+                for t in key_terms:
+                    subqs.remove(t)
+                values = [t['term'][key]['value'] for t in key_terms]
+                terms = {'terms': {key: values}}
+                if boost != 0:
+                    terms['terms']['boost'] = boost
+                subqs.append(terms)
+
+        # Eliminate toplevel bool-should if only one sub-query
+        if len(subqs) == 1:
+            query = self._boost(op, subqs[0])
+
+        return query
 
     def _bool(self, name: str, op: Union[q.And, q.Or]) -> EsQ:
         return {'bool': self._boost(op, {
